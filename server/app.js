@@ -5,7 +5,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { OAuth2Client } = require('google-auth-library');
 const path = require('path');
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const app = express();
 app.use(cors());
@@ -57,7 +60,18 @@ app.post('/Signup', async (req, res) => {
       'INSERT INTO users (first_name, last_name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
       [firstName, lastName, email, hashedPassword]
     );
-    res.status(201).json({ message: 'User signed up successfully!', userId: result.rows[0].id });
+
+    const token = jwt.sign(
+      { userId: result.rows[0].id, email },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({ 
+      message: 'User signed up successfully!', 
+      token,
+      user: { firstName, email }
+    });
   } catch (err) {
     console.error('Error during signup:', err);
     if (err.code === '23505') {
@@ -88,10 +102,71 @@ app.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    res.status(200).json({ message: 'Login successful!', token });
+    res.status(200).json({ 
+      message: 'Login successful!', 
+      token,
+      user: { firstName: user.first_name, email: user.email }
+    });
   } catch (err) {
     console.error('Error during login:', err);
     res.status(500).json({ error: 'An error occurred while logging in.' });
+  }
+});
+
+// Google Auth Route
+app.post('/api/auth/google', async (req, res) => {
+  const { idToken, accessToken } = req.body;
+  try {
+    let email, given_name, family_name;
+
+    if (idToken) {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      email = payload.email;
+      given_name = payload.given_name;
+      family_name = payload.family_name;
+    } else if (accessToken) {
+      // Verify via tokeninfo endpoint
+      const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
+      const userInfo = await response.json();
+      if (userInfo.error) throw new Error(userInfo.error_description);
+      email = userInfo.email;
+      given_name = userInfo.given_name;
+      family_name = userInfo.family_name;
+    } else {
+      return res.status(400).json({ error: 'No token provided' });
+    }
+
+    // Check if user exists
+    let result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    let user = result.rows[0];
+
+    if (!user) {
+      const dummyHash = 'OAUTH_USER_NO_PASSWORD';
+      const insertResult = await pool.query(
+        'INSERT INTO users (first_name, last_name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, email',
+        [given_name || 'User', family_name || '', email, dummyHash]
+      );
+      user = insertResult.rows[0];
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(200).json({ 
+      message: 'Google Login successful!', 
+      token, 
+      user: { firstName: user.first_name, email: user.email }
+    });
+  } catch (err) {
+    console.error('Error during Google Auth:', err);
+    res.status(500).json({ error: 'Google Authentication failed.' });
   }
 });
 
@@ -146,6 +221,51 @@ app.get('/api/recipes/saved', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error fetching saved recipes:', err);
     res.status(500).json({ error: 'Failed to fetch saved recipes.' });
+  }
+});
+
+// Get Reviews from DB
+app.get('/api/reviews', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM reviews ORDER BY created_at DESC');
+    if (result.rows.length === 0) {
+      // Fallback to defaults if DB is empty
+      return res.json([
+        { name: 'Ifra', accent_color: '#75070C', text: "The AI recommendations are so accurate, it knows my taste better than I do!" },
+        { name: 'Menahil', accent_color: '#4F6815', text: "Cooking has never been this easy and fun. Highly recommended!" },
+        { name: 'Maryam', accent_color: '#75070C', text: "The 15-minute recipes are a lifesaver for busy weeknights." }
+      ]);
+    }
+    // Map database field names to frontend expected names (if different)
+    const formattedReviews = result.rows.map(r => ({
+      name: r.name,
+      text: r.text,
+      acc: r.accent_color
+    }));
+    res.json(formattedReviews);
+  } catch (err) {
+    console.error('Error fetching reviews:', err);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+// Post a new review
+app.post('/api/reviews', authenticateToken, async (req, res) => {
+  const { text, accent_color } = req.body;
+  const userId = req.user.userId;
+  try {
+    // Get user's name from users table
+    const userResult = await pool.query('SELECT first_name FROM users WHERE id = $1', [userId]);
+    const name = userResult.rows[0]?.first_name || 'Anonymous';
+    
+    await pool.query(
+      'INSERT INTO reviews (user_id, name, text, accent_color) VALUES ($1, $2, $3, $4)',
+      [userId, name, text, accent_color || '#75070C']
+    );
+    res.status(201).json({ message: 'Review added successfully!' });
+  } catch (err) {
+    console.error('Error adding review:', err);
+    res.status(500).json({ error: 'Failed to add review' });
   }
 });
 
