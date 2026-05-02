@@ -8,12 +8,12 @@ const pool = new Pool({
 
 const runMigration = async () => {
   try {
-    console.log('Running migration...');
-    // Drop default for rating column
+    // Add image_url column to saved_recipes
     await pool.query(`
-      ALTER TABLE reviews ALTER COLUMN rating DROP DEFAULT;
+      ALTER TABLE saved_recipes ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
     `);
-    console.log('Migration completed successfully: rating column default dropped.');
+    console.log('Migration completed successfully: image_url column added.');
+
   } catch (err) {
     console.error('Migration failed:', err);
   } finally {

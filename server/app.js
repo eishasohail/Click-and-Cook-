@@ -29,12 +29,65 @@ pool.query('SELECT NOW()', (err, res) => {
   }
 });
 
-// Gemini AI Config
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
-  systemInstruction: "You are a professional chef and nutritionist. Generate detailed recipes based on available ingredients, respecting calorie limits and serving sizes. Format responses in plain text only — no markdown, no asterisks, no hashtags, no special characters. Use clear headings like INGREDIENTS:, INSTRUCTIONS:, NUTRITIONAL INFO:, TIPS: in plain uppercase."
-});
+// Helper to get Gemini Model with fallback capability
+const getGeminiModel = (apiKey, isJson = true) => {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  if (isJson) {
+    return genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: { 
+        responseMimeType: "application/json",
+        temperature: 0.7,
+        maxOutputTokens: 4096
+      },
+      systemInstruction: `You are a culinary AI. Generate recipes in valid JSON format only.
+      Schema:
+      {
+        "recipeName": "string",
+        "prepTime": number (minutes),
+        "cookTime": number (minutes),
+        "calories": number,
+        "servings": number,
+        "cuisine": "string",
+        "difficulty": "Easy|Medium|Hard",
+        "dietaryTags": ["string"],
+        "ingredients": [{"item": "string", "amount": "string", "unit": "string"}],
+        "instructions": [{"instruction": "string", "duration": "string"}],
+        "nutritionalInfo": {"protein": "string", "carbs": "string", "fat": "string"},
+        "imageSearchQuery": "string (3-4 words for Unsplash search)"
+      }`
+    });
+  }
+  return genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    systemInstruction: "You are a professional chef and nutritionist. Generate detailed recipes based on available ingredients, respecting calorie limits and serving sizes. Format responses in plain text only — no markdown, no asterisks, no hashtags, no special characters. Use clear headings like INGREDIENTS:, INSTRUCTIONS:, NUTRITIONAL INFO:, TIPS: in plain uppercase."
+  });
+};
+
+// Generic generation function with key fallback
+async function generateContentWithFallback(prompt, isJson = true) {
+  const keys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_BACKUP].filter(Boolean);
+  let lastErr = null;
+
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const model = getGeminiModel(keys[i], isJson);
+      const result = await model.generateContent(prompt);
+      return await result.response;
+    } catch (err) {
+      lastErr = err;
+      const errMsg = err.message?.toLowerCase() || "";
+      const isQuotaError = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('exhausted');
+
+      if (isQuotaError && i < keys.length - 1) {
+        console.warn(`⚠️ Primary Gemini API Key exhausted/limit hit. Retrying with backup key...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
 
 // Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
@@ -67,8 +120,8 @@ app.post('/Signup', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    res.status(201).json({ 
-      message: 'User signed up successfully!', 
+    res.status(201).json({
+      message: 'User signed up successfully!',
       token,
       user: { firstName, email }
     });
@@ -102,8 +155,8 @@ app.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    res.status(200).json({ 
-      message: 'Login successful!', 
+    res.status(200).json({
+      message: 'Login successful!',
       token,
       user: { firstName: user.first_name, email: user.email }
     });
@@ -159,9 +212,9 @@ app.post('/api/auth/google', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    res.status(200).json({ 
-      message: 'Google Login successful!', 
-      token, 
+    res.status(200).json({
+      message: 'Google Login successful!',
+      token,
       user: { firstName: user.first_name, email: user.email }
     });
   } catch (err) {
@@ -170,21 +223,17 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// Gemini AI Route
+
+// Gemini AI Route (Original Generic)
 app.post('/api/ask', async (req, res) => {
   const { ingredients, calories, servings, notes, conversationHistory } = req.body;
   try {
     if (!ingredients) {
       return res.status(400).json({ error: 'Ingredients are required.' });
     }
-    const chat = model.startChat({
-      history: conversationHistory || [],
-      generationConfig: { maxOutputTokens: 3000 },
-    });
     const ingredientsList = Array.isArray(ingredients) ? ingredients.join(', ') : ingredients;
     const userPrompt = `Generate a recipe using: ${ingredientsList}\nExpected Calories: ${calories || 'not specified'}\nServings: ${servings || 1}\nExtra Notes: ${notes || 'none'}`;
-    const result = await chat.sendMessage(userPrompt);
-    const response = await result.response;
+    const response = await generateContentWithFallback(userPrompt, false);
     const text = response.text();
     res.json({ recipe: text });
   } catch (err) {
@@ -193,21 +242,131 @@ app.post('/api/ask', async (req, res) => {
   }
 });
 
-// Save Recipe Route (JWT Protected)
-app.post('/api/recipes/save', authenticateToken, async (req, res) => {
-  const { title, ingredients, instructions, calories, servings } = req.body;
-  const userId = req.user.userId;
+// Structured Recipe Generation Route
+app.post('/api/recipes/generate', authenticateToken, async (req, res) => {
+  const { ingredients, calories, servings, preferences } = req.body;
   try {
-    await pool.query(
-      'INSERT INTO saved_recipes (user_id, title, ingredients, instructions, calories, servings) VALUES ($1, $2, $3, $4, $5, $6)',
-      [userId, title, ingredients, instructions, calories, servings]
-    );
+    const ingredientsList = Array.isArray(ingredients) ? ingredients.join(', ') : ingredients;
+    const prompt = `Generate a high-quality recipe.
+    Ingredients: ${ingredientsList}
+    Target Calories: ${calories}
+    Servings: ${servings}
+    Preferences/Notes: ${preferences}
+    
+    Ensure the JSON is valid and includes a descriptive image keyword for Unsplash.`;
+
+    console.log('Generating recipe with prompt:', prompt);
+    const response = await generateContentWithFallback(prompt, true);
+    let text = response.text();
+
+    console.log('Gemini raw response:', text);
+
+    // Robust JSON parsing (strip markdown wrappers)
+    if (text.includes('```')) {
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    }
+
+    let recipeData;
+    try {
+      recipeData = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError, 'Raw text:', text);
+      return res.status(500).json({ error: 'Failed to parse recipe data from AI.' });
+    }
+
+    // Fetch real image from Unsplash
+    try {
+      const unsplashQuery = recipeData.imageSearchQuery || recipeData.recipeName + ' food';
+      const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(unsplashQuery)}&client_id=${process.env.UNSPLASH_ACCESS_KEY}&per_page=1`;
+      const unsplashRes = await fetch(unsplashUrl);
+      const unsplashData = await unsplashRes.json();
+      
+      if (unsplashData.results && unsplashData.results.length > 0) {
+        recipeData.image = unsplashData.results[0].urls.regular;
+      } else {
+        recipeData.image = "https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&q=80&w=800";
+      }
+    } catch (imgErr) {
+      console.error('Unsplash Error:', imgErr);
+      recipeData.image = "https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&q=80&w=800";
+    }
+
+    res.json(recipeData);
+  } catch (err) {
+    console.error('Gemini Generation Error:', err);
+    res.status(500).json({ error: `AI Generation Failed: ${err.message || 'Unknown Error'}` });
+  }
+});
+
+
+
+// Follow-up Question Route
+app.post('/api/recipes/follow-up', authenticateToken, async (req, res) => {
+  const { recipeId, question, recipeContext } = req.body;
+  try {
+    const prompt = `${question}\n\nIMPORTANT: Keep your answer very concise (max 3-4 lines). Focus on being helpful and direct. Use a friendly but professional chef tone.`;
+    
+    // For follow-ups, we'll use a simpler fallback approach without the chat history object for now
+    // or we could refactor more deeply. For now, let's just use the fallback helper for consistency.
+    const response = await generateContentWithFallback(`Recipe Context: ${JSON.stringify(recipeContext)}\n\nQuestion: ${prompt}`, false);
+    res.json({ answer: response.text() });
+  } catch (err) {
+    console.error('Follow-up Error:', err);
+    res.status(500).json({ error: 'Failed to answer follow-up question.' });
+  }
+});
+
+// Save Recipe Route (JWT Protected) - Updated to handle structured data
+app.post('/api/recipes/save', authenticateToken, async (req, res) => {
+  const {
+    title, recipeName,
+    ingredients,
+    instructions,
+    calories,
+    servings,
+    image, image_url
+  } = req.body;
+
+  const userId = req.user.userId;
+  const finalTitle = title || recipeName || "Untitled Recipe";
+
+  // Format ingredients and instructions if they are objects
+  const formatList = (list) => {
+    if (!list) return "";
+    if (typeof list === 'string') return list;
+    if (Array.isArray(list)) {
+      return list.map(item => {
+        if (typeof item === 'string') return item;
+        if (item.item) return `${item.amount || ''} ${item.unit || ''} ${item.item}`.trim();
+        if (item.instruction) return item.instruction;
+        return JSON.stringify(item);
+      }).join('\n');
+    }
+    return JSON.stringify(list);
+  };
+
+    const finalImage = image || image_url || "";
+
+    try {
+      await pool.query(
+        'INSERT INTO saved_recipes (user_id, title, ingredients, instructions, calories, servings, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [
+          userId,
+          finalTitle,
+          formatList(ingredients),
+          formatList(instructions),
+          calories,
+          servings,
+          finalImage
+        ]
+      );
     res.status(201).json({ message: 'Recipe saved successfully!' });
   } catch (err) {
     console.error('Error saving recipe:', err);
     res.status(500).json({ error: 'Failed to save recipe.' });
   }
 });
+
 
 // Get Saved Recipes Route (JWT Protected)
 app.get('/api/recipes/saved', authenticateToken, async (req, res) => {
@@ -252,17 +411,17 @@ app.get('/api/reviews', async (req, res) => {
 
 // Post a new review
 app.post('/api/reviews', authenticateToken, async (req, res) => {
-    const { text, accent_color, rating } = req.body;
-    const userId = req.user.userId;
-    try {
-      // Get user's name from users table
-      const userResult = await pool.query('SELECT first_name FROM users WHERE id = $1', [userId]);
-      const name = userResult.rows[0]?.first_name || 'Anonymous';
-      
-      await pool.query(
-        'INSERT INTO reviews (user_id, name, text, accent_color, rating) VALUES ($1, $2, $3, $4, $5)',
-        [userId, name, text, accent_color || '#75070C', rating !== undefined ? rating : 5]
-      );
+  const { text, accent_color, rating } = req.body;
+  const userId = req.user.userId;
+  try {
+    // Get user's name from users table
+    const userResult = await pool.query('SELECT first_name FROM users WHERE id = $1', [userId]);
+    const name = userResult.rows[0]?.first_name || 'Anonymous';
+
+    await pool.query(
+      'INSERT INTO reviews (user_id, name, text, accent_color, rating) VALUES ($1, $2, $3, $4, $5)',
+      [userId, name, text, accent_color || '#75070C', rating !== undefined ? rating : 5]
+    );
     res.status(201).json({ message: 'Review added successfully!' });
   } catch (err) {
     console.error('Error adding review:', err);
