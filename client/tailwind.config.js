@@ -1,6 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./src/**/*.{js,jsx,ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,jsx,ts,tsx}",
+    "./src/pages/**/*.{js,jsx}"
+  ],
   theme: {
     extend: {
       colors: {
@@ -57,15 +61,39 @@ module.exports = {
       },
       fontFamily: {
         'jakarta': ['Plus Jakarta Sans', 'sans-serif'],
+        "h1": ["Plus Jakarta Sans"],
+        "h2": ["Plus Jakarta Sans"],
+        "body-md": ["Plus Jakarta Sans"],
+        "body-lg": ["Plus Jakarta Sans"],
+        "label-sm": ["Plus Jakarta Sans"],
+        "h3": ["Plus Jakarta Sans"]
+      },
+      spacing: {
+        "lg": "24px",
+        "unit": "8px",
+        "md": "16px",
+        "gutter": "24px",
+        "xl": "40px",
+        "xs": "4px",
+        "container-max": "1280px",
+        "sm": "8px",
+        "stack-lg": "40px",
+        "margin-page": "24px"
+      },
+      borderRadius: {
+        "DEFAULT": "0.25rem",
+        "lg": "0.5rem",
+        "xl": "0.75rem",
+        "full": "9999px"
       },
       fontSize: {
-        "h1": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "800"}],
-        "h2": ["32px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "700"}],
-        "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "700"}],
-        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "500"}],
-        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
-        "label-bold": ["14px", {"lineHeight": "1.2", "fontWeight": "700"}],
-        "label-sm": ["12px", {"lineHeight": "1.2", "fontWeight": "600"}],
+        "h1": ["40px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+        "h2": ["32px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+        "h3": ["24px", { "lineHeight": "1.4", "fontWeight": "700" }],
+        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "500" }],
+        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+        "label-bold": ["14px", { "lineHeight": "1.2", "fontWeight": "700" }],
+        "label-sm": ["12px", { "lineHeight": "1.2", "fontWeight": "600" }],
       },
       keyframes: {
         fadeInUp: {

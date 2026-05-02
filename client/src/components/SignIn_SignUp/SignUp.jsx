@@ -33,7 +33,7 @@ export default function SignUp() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % images.length);
-    }, 4000); 
+    }, 4000);
     return () => clearInterval(timer);
   }, []);
 
@@ -147,7 +147,7 @@ export default function SignUp() {
 
   return (
     <div className="font-jakarta text-on-surface bg-background mesh-gradient min-h-screen flex items-center justify-center p-6 selection:bg-primary-container selection:text-on-primary-container overflow-hidden">
-      
+
       {/* Background Image */}
       <div className="fixed inset-0 z-0 opacity-40 overflow-hidden pointer-events-none">
         <img
@@ -158,7 +158,7 @@ export default function SignUp() {
       </div>
 
       <main className="relative z-10 w-full max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-        
+
         {/* Left Side: Branding */}
         <motion.div
           initial={{ opacity: 0, x: -50 }}
@@ -190,7 +190,7 @@ export default function SignUp() {
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               className="absolute -bottom-6 -right-6 glass-panel p-4 rounded-2xl shadow-xl flex items-center gap-3 border border-primary/10 z-20"
             >
-              <div 
+              <div
                 className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg"
                 style={{ backgroundColor: "#ff6b35" }}
               >
@@ -222,7 +222,7 @@ export default function SignUp() {
           className="flex justify-center lg:justify-end w-full"
         >
           <div className="glass-panel w-full max-w-md rounded-[2.5rem] p-6 lg:p-8 shadow-[0_32px_64px_-16px_rgba(171,53,0,0.15)] flex flex-col gap-4 border border-white/40 hover:border-brand-orange/20 transition-colors duration-500">
-            
+
             <div className="flex flex-col gap-1 text-center">
               <h2 className="text-h2 text-on-surface">Join the Kitchen!</h2>
               <p className="text-body-md text-on-surface-variant">Start your culinary journey today.</p>

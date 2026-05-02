@@ -23,5 +23,6 @@ CREATE TABLE reviews (
     name VARCHAR(100) NOT NULL,
     text TEXT NOT NULL,
     accent_color VARCHAR(20) DEFAULT '#75070C',
+    ALTER TABLE reviews ADD COLUMN rating INTEGER DEFAULT 5 CHECK (rating >= 1 AND rating <= 5);
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

@@ -227,7 +227,7 @@ app.get('/api/recipes/saved', authenticateToken, async (req, res) => {
 // Get Reviews from DB
 app.get('/api/reviews', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM reviews ORDER BY created_at DESC');
+    const result = await pool.query('SELECT * FROM reviews ORDER BY created_at DESC LIMIT 3');
     if (result.rows.length === 0) {
       // Fallback to defaults if DB is empty
       return res.json([
@@ -240,7 +240,8 @@ app.get('/api/reviews', async (req, res) => {
     const formattedReviews = result.rows.map(r => ({
       name: r.name,
       text: r.text,
-      acc: r.accent_color
+      acc: r.accent_color,
+      rating: r.rating
     }));
     res.json(formattedReviews);
   } catch (err) {
@@ -251,17 +252,17 @@ app.get('/api/reviews', async (req, res) => {
 
 // Post a new review
 app.post('/api/reviews', authenticateToken, async (req, res) => {
-  const { text, accent_color } = req.body;
-  const userId = req.user.userId;
-  try {
-    // Get user's name from users table
-    const userResult = await pool.query('SELECT first_name FROM users WHERE id = $1', [userId]);
-    const name = userResult.rows[0]?.first_name || 'Anonymous';
-    
-    await pool.query(
-      'INSERT INTO reviews (user_id, name, text, accent_color) VALUES ($1, $2, $3, $4)',
-      [userId, name, text, accent_color || '#75070C']
-    );
+    const { text, accent_color, rating } = req.body;
+    const userId = req.user.userId;
+    try {
+      // Get user's name from users table
+      const userResult = await pool.query('SELECT first_name FROM users WHERE id = $1', [userId]);
+      const name = userResult.rows[0]?.first_name || 'Anonymous';
+      
+      await pool.query(
+        'INSERT INTO reviews (user_id, name, text, accent_color, rating) VALUES ($1, $2, $3, $4, $5)',
+        [userId, name, text, accent_color || '#75070C', rating !== undefined ? rating : 5]
+      );
     res.status(201).json({ message: 'Review added successfully!' });
   } catch (err) {
     console.error('Error adding review:', err);

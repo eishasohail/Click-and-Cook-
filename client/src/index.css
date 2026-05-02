@@ -1,11 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
 * {
   font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
 body {
@@ -15,12 +19,21 @@ body {
   background-color: #fff8f6;
 }
 
-button, 
-a, 
-input[type="submit"], 
-input[type="button"], 
+button,
+a,
+input[type="submit"],
+input[type="button"],
 [role="button"] {
   cursor: pointer;
+}
+
+.docked {
+  position: sticky;
+  top: 0;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .glass-panel {

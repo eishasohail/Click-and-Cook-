@@ -4,6 +4,10 @@ import SignUp from './components/SignIn_SignUp/SignUp';
 import SignIn from './components/SignIn_SignUp/SignIn';
 import Form from './components/recipe/form';
 import Landing from './pages/Landing';
+import Dashboard from './pages/Dashboard';
+import AIRecipes from './pages/AIRecipes';
+import SmartLibrary from './pages/SmartLibrary';
+import PersonalizedPicks from './pages/PersonalizedPicks';
 
 const AppContent = () => {
   const location = useLocation();
@@ -17,8 +21,14 @@ const AppContent = () => {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
         
-        {/* DASHBOARD (RECIPE FORM) */}
-        <Route path="/dashboard" element={<Form />} />
+        {/* DASHBOARD */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/recipe-form" element={<Form />} />
+        
+        {/* SUB-PAGES */}
+        <Route path="/ai-recipes" element={<AIRecipes />} />
+        <Route path="/smart-library" element={<SmartLibrary />} />
+        <Route path="/personalized-picks" element={<PersonalizedPicks />} />
         
         {/* FALLBACKS */}
         <Route path="/recipe-recommendation" element={<Navigate to="/dashboard" replace />} />
