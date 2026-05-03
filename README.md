@@ -1,4 +1,4 @@
-# 🍳 Click & Cook – Smart Kitchen Companion
+# Click & Cook – Smart Kitchen Companion
 
 ![Click & Cook Header](https://raw.githubusercontent.com/eishasohail/Click-and-Cook-/main/client/public/bg10.jpg)
 
@@ -32,7 +32,9 @@ Click & Cook is a high-fidelity, AI-driven culinary platform designed to elimina
 *   **Node.js & Express**: Robust and scalable server-side logic.
 *   **PostgreSQL**: Relational database for secure user and recipe storage.
 *   **Google Gemini API**: Powering the advanced AI recipe generation and follow-up chat.
-
+### ** Unsplash Image Integration**
+To ensure every recipe looks as delicious as it tastes, Click & Cook integrates with the **Unsplash API**. 
+*   **Dynamic Visuals**: The platform automatically fetches high-resolution, gourmet food photography matching the generated recipe title.
 ---
 
 ## 🛠 Installation & Setup
