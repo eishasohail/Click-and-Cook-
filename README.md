@@ -80,11 +80,9 @@ This project is part of a specialized portfolio evaluation. All rights reserved 
 ---
 
 ## 👥 Contributors
-
-*   **Menahil Ali** – Lead Developer & UI/UX Designer
-*   **Ifra Rizwan** – Backend Architect & AI Specialist
-*   **Maryam Rizwan** – Database Administrator & Frontend Engineer
-
+Ifra Rizwan
+Menahil ALi
+Maryam Rizwan
 ---
 
 **Built with ❤️ by the Click & Cook Team.**
