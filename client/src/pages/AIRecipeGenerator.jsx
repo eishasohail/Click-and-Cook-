@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../redux/slices/authSlice';
 import Logo from "../components/shared/Logo";
@@ -28,16 +28,23 @@ const SafeLogo = (props) => {
 
 const AIRecipeGenerator = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const { user, token } = useSelector((state) => state.auth);
   const [scrolled, setScrolled] = useState(false);
 
   // Form State
-  const [ingredients, setIngredients] = useState(['Chicken Breast', 'Spinach', 'Garlic']);
+  const [ingredients, setIngredients] = useState(
+    location.state?.prefillIngredients || []
+  );
   const [ingredientInput, setIngredientInput] = useState('');
-  const [calories, setCalories] = useState(750);
+  const [calories, setCalories] = useState(
+    location.state?.prefillCalories || 750
+  );
   const [servings, setServings] = useState(2);
-  const [dietaryNotes, setDietaryNotes] = useState('');
+  const [dietaryNotes, setDietaryNotes] = useState(
+    location.state?.prefillNotes || ''
+  );
 
   // UI / API State
   const [isLoading, setIsLoading] = useState(false);
@@ -50,6 +57,17 @@ const AIRecipeGenerator = () => {
   const [followUpLoading, setFollowUpLoading] = useState(false);
 
   const scrollRef = useRef(null);
+  const recipeRef = useRef(null);
+
+  const cleanFollowUpText = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/RECIPE NAME:.*?\n/gi, '')
+      .replace(/CATEGORY:.*?\n/gi, '')
+      .replace(/INGREDIENTS:.*?\n/gi, '')
+      .replace(/INSTRUCTIONS:.*?\n/gi, '')
+      .trim();
+  };
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 30);
@@ -70,16 +88,31 @@ const AIRecipeGenerator = () => {
     }
   }, [showSaveSuccess]);
 
+  useEffect(() => {
+    const progress = ((calories - 100) / (2000 - 100)) * 100;
+    document.documentElement.style.setProperty(
+      '--slider-progress', `${progress}%`
+    );
+  }, [calories]);
+
   const handleLogout = () => {
     dispatch(logout());
     navigate('/');
   };
 
   const addIngredient = () => {
-    if (ingredientInput.trim() && !ingredients.includes(ingredientInput.trim())) {
-      setIngredients([...ingredients, ingredientInput.trim()]);
-      setIngredientInput('');
+    if (!ingredientInput.trim()) return;
+    
+    // Allow users to paste comma-separated lists (e.g. "chicken, tomato, garlic")
+    const newItems = ingredientInput
+      .split(',')
+      .map(item => item.trim())
+      .filter(item => item && !ingredients.includes(item));
+
+    if (newItems.length > 0) {
+      setIngredients([...ingredients, ...newItems]);
     }
+    setIngredientInput('');
   };
 
   const removeIngredient = (index) => {
@@ -97,8 +130,10 @@ const AIRecipeGenerator = () => {
     setMessages([]);
     setIsSaved(false);
 
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
     try {
-      const response = await axios.post('/api/recipes/generate', {
+      const response = await axios.post(`${API_BASE_URL}/api/recipes/generate`, {
         ingredients,
         calories,
         servings,
@@ -112,12 +147,26 @@ const AIRecipeGenerator = () => {
       setMessages([
         {
           role: 'bot',
-          text: `Hello! I'm your AI Sous-Chef. I've crafted a perfect "${response.data.recipeName}" recipe based on your selection. Ready to cook?`
+          text: `Your recipe is ready! I've generated "${response.data.recipeName}" based on your ingredients. Scroll down to see the full recipe. Feel free to ask me anything about it!`
         }
       ]);
+
+      setTimeout(() => {
+        if (recipeRef.current) {
+          const top = recipeRef.current.getBoundingClientRect().top + window.pageYOffset - 100;
+          window.scrollTo({ top, behavior: 'smooth' });
+        }
+      }, 100);
     } catch (err) {
       console.error("Failed to generate recipe:", err);
-      const errorMsg = err.response?.data?.error || "Something went wrong while generating your recipe. Please try again.";
+      let errorMsg = "Something went wrong while generating your recipe. Please try again.";
+      
+      if (err.response?.data?.error) {
+        errorMsg = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : JSON.stringify(err.response.data.error);
+      }
+      
       alert(errorMsg);
     } finally {
       setIsLoading(false);
@@ -126,11 +175,25 @@ const AIRecipeGenerator = () => {
 
   const saveRecipe = async () => {
     if (!recipe || isSaved || saveLoading) return;
-
     setSaveLoading(true);
+
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
+      || 'http://localhost:5000';
+
+    // Log what we are sending
+    console.log('=== SAVING RECIPE ===');
+    console.log('category:', recipe.category);
+    console.log('image:', recipe.image);
+    console.log('recipeName:', recipe.recipeName);
+    console.log('====================');
+
     try {
-      await axios.post('/api/recipes/save', {
+      await axios.post(`${API_BASE_URL}/api/recipes/save`, {
         ...recipe,
+        // Explicitly map fields server expects
+        title: recipe.recipeName,
+        image_url: recipe.image,
+        category: recipe.category,
         sourceType: 'ai-generated'
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -138,11 +201,6 @@ const AIRecipeGenerator = () => {
 
       setIsSaved(true);
       setShowSaveSuccess(true);
-
-      // Navigate after 2 seconds
-      setTimeout(() => {
-        navigate('/smart-library');
-      }, 2000);
     } catch (err) {
       console.error("Failed to save recipe:", err);
       alert("Failed to save recipe to your library.");
@@ -160,7 +218,8 @@ const AIRecipeGenerator = () => {
     setFollowUpLoading(true);
 
     try {
-      const response = await axios.post('/api/recipes/follow-up', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const response = await axios.post(`${API_BASE_URL}/api/recipes/follow-up`, {
         recipeId: recipe?.id,
         question: question,
         recipeContext: recipe
@@ -179,14 +238,14 @@ const AIRecipeGenerator = () => {
 
   // ── Style Tokens ──
   const colors = {
-    primary: '#ab3500',
+    primary: '#75070C',
     brandOrange: '#FF6B35',
-    background: '#FFF8F6',
+    background: '#F0E6DA',
     surfaceContainer: '#FFE9E3',
     surfaceLow: '#FFF1ED',
     surfaceLowest: '#FFFFFF',
     secondaryGreen: '#4F6815',
-    text: '#261814',
+    text: '#2A241E',
     textVariant: '#594139',
     outline: '#E1BFB5',
     accentRed: '#75070C'
@@ -222,6 +281,63 @@ const AIRecipeGenerator = () => {
           scrollbar-color: #E1BFB5 transparent;
           scroll-behavior: smooth;
         }
+        input[type='range'] {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          border-radius: 10px;
+          background: linear-gradient(
+            to right,
+            #75070C 0%,
+            #75070C var(--slider-progress, 32%),
+            #FFE9E3 var(--slider-progress, 32%),
+            #FFE9E3 100%
+          );
+          outline: none;
+          cursor: pointer;
+        }
+        input[type='range']::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #75070C;
+          cursor: pointer;
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(117, 7, 12, 0.4);
+          transition: all 0.2s ease;
+        }
+        input[type='range']::-webkit-slider-thumb:hover {
+          transform: scale(1.2);
+          box-shadow: 0 4px 12px rgba(117, 7, 12, 0.5);
+        }
+        input[type='range']::-moz-range-thumb {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #75070C;
+          cursor: pointer;
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(117, 7, 12, 0.4);
+        }
+        .btn-fluid-fill {
+          position: relative;
+          overflow: hidden;
+        }
+        .btn-fluid-fill::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: rgba(255, 255, 255, 0.2);
+          transform: translateY(100%);
+          transition: transform 0.5s ease-out;
+          pointer-events: none;
+        }
+        .btn-fluid-fill:hover::before {
+          transform: translateY(0);
+        }
       `}</style>
 
       {/* ── Navbar ── */}
@@ -233,30 +349,22 @@ const AIRecipeGenerator = () => {
         transition: 'all 0.4s ease',
         borderBottom: scrolled ? `1px solid rgba(171, 53, 0, 0.1)` : 'none'
       }}>
-        <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '0 60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer', flex: '0 0 240px' }}>
+        <div style={{ position: 'relative', maxWidth: '1440px', margin: '0 auto', padding: '0 60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
             <SafeLogo />
           </div>
 
-          <div style={{ display: 'flex', gap: '35px', flex: 1, justifyContent: 'center' }}>
-            <span onClick={() => navigate('/ai-recipes')} style={{ fontWeight: '800', color: colors.primary, cursor: 'pointer', fontSize: '14px', borderBottom: `2px solid ${colors.primary}`, paddingBottom: '4px' }}>AI Generator</span>
-            <span onClick={() => navigate('/smart-library')} style={{ fontWeight: '700', color: colors.textVariant, cursor: 'pointer', fontSize: '14px', opacity: 0.7, transition: 'opacity 0.3s' }} onMouseEnter={(e) => e.target.style.opacity = 1} onMouseLeave={(e) => e.target.style.opacity = 0.7}>Library</span>
+          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '35px', alignItems: 'center' }}>
+            <span onClick={() => navigate('/ai-recipes')} style={{ fontWeight: '800', color: colors.primary, cursor: 'pointer', fontSize: '14px', borderBottom: `2px solid ${colors.primary}`, paddingBottom: '4px' }}>Recipe Generator</span>
+            <span onClick={() => navigate('/library')} style={{ fontWeight: '700', color: colors.textVariant, cursor: 'pointer', fontSize: '14px', opacity: 0.7, transition: 'opacity 0.3s' }} onMouseEnter={(e) => (e.target.style.opacity = 1)} onMouseLeave={(e) => (e.target.style.opacity = 0.7)}>My CookBook</span>
+            <span onClick={() => navigate('/personalized-picks')} style={{ fontWeight: '700', color: colors.textVariant, cursor: 'pointer', fontSize: '14px', opacity: 0.7, transition: 'opacity 0.3s' }} onMouseEnter={(e) => (e.target.style.opacity = 1)} onMouseLeave={(e) => (e.target.style.opacity = 0.7)}>Personalized Picks</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(171, 53, 0, 0.05)', borderRadius: '100px', flex: '0 0 240px', justifyContent: 'flex-end' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '32px', height: '32px', backgroundColor: colors.primary, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 8px rgba(171, 53, 0, 0.2)' }}>
-                <User size={16} />
-              </div>
-              <span style={{ fontSize: '14px', fontWeight: '800' }}>{user?.firstName || 'Chef'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 16px', backgroundColor: 'rgba(117, 7, 12, 0.05)', borderRadius: '100px' }}>
+            <div style={{ width: '32px', height: '32px', backgroundColor: '#75070C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 8px rgba(117, 7, 12, 0.2)' }}>
+              <User size={16} />
             </div>
-            <div style={{ width: '1px', height: '20px', backgroundColor: colors.outline, margin: '0 8px' }}></div>
-            <button
-              onClick={handleLogout}
-              style={{ background: 'none', border: 'none', color: colors.accentRed, padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', fontSize: '12px', textTransform: 'uppercase' }}
-            >
-              <LogOut size={16} />
-            </button>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: '#2A241E' }}>{user?.firstName || 'Chef'}</span>
           </div>
         </div>
       </nav>
@@ -275,11 +383,31 @@ const AIRecipeGenerator = () => {
           <div style={{ marginBottom: '32px' }}>
             <label style={{ display: 'block', fontWeight: '800', marginBottom: '12px', fontSize: '14px' }}>Pantry Selection</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', backgroundColor: 'white', padding: '12px', borderRadius: '16px', border: `1px solid ${colors.outline}`, marginBottom: '12px' }}>
-              {ingredients.map((ing, i) => (
-                <div key={i} style={{ backgroundColor: colors.secondaryGreen, color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(79, 104, 21, 0.2)' }}>
-                  {ing} <X size={14} style={{ cursor: 'pointer' }} onClick={() => removeIngredient(i)} />
-                </div>
-              ))}
+              {ingredients.length === 0 && (
+                <span style={{ 
+                  fontSize: '12px', 
+                  color: '#594139', 
+                  opacity: 0.5,
+                  fontStyle: 'italic',
+                  padding: '4px 4px'
+                }}>
+                  No ingredients added yet...
+                </span>
+              )}
+              <AnimatePresence>
+                {ingredients.map((ing, i) => (
+                  <motion.div 
+                    key={i}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ backgroundColor: colors.secondaryGreen, color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(79, 104, 21, 0.2)' }}
+                  >
+                    {ing} <X size={14} style={{ cursor: 'pointer' }} onClick={() => removeIngredient(i)} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
               <button
                 onClick={addIngredient}
                 style={{ backgroundColor: 'transparent', border: `1px dashed ${colors.primary}`, color: colors.primary, padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s ease' }}
@@ -312,7 +440,7 @@ const AIRecipeGenerator = () => {
               min="100" max="2000" step="50"
               value={calories}
               onChange={(e) => setCalories(parseInt(e.target.value))}
-              style={{ width: '100%', height: '6px', borderRadius: '10px', backgroundColor: '#FFDBD0', appearance: 'none', cursor: 'pointer', outline: 'none' }}
+              style={{ width: '100%' }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: colors.textVariant, fontWeight: '700' }}>
               <span>100</span>
@@ -351,79 +479,218 @@ const AIRecipeGenerator = () => {
             />
           </div>
 
-          <button
+          <motion.button
             onClick={generateRecipe}
             disabled={isLoading || ingredients.length === 0}
+            whileHover={(!isLoading && ingredients.length > 0) 
+              ? { scale: 1.03, y: -3 } : {}}
+            whileTap={(!isLoading && ingredients.length > 0) 
+              ? { scale: 0.97 } : {}}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="btn-fluid-fill"
             style={{
-              width: '100%', padding: '18px', borderRadius: '20px', backgroundColor: colors.brandOrange, color: 'white',
-              border: 'none', fontWeight: '900', fontSize: '16px', textTransform: 'uppercase', letterSpacing: '0.5px',
-              cursor: (isLoading || ingredients.length === 0) ? 'not-allowed' : 'pointer',
-              opacity: (isLoading || ingredients.length === 0) ? 0.7 : 1,
-              boxShadow: '0 8px 16px rgba(255, 107, 53, 0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              transition: 'all 0.3s ease'
+              width: '100%', 
+              padding: '18px', 
+              borderRadius: '20px', 
+              backgroundColor: colors.primary, 
+              color: 'white',
+              border: 'none', 
+              fontWeight: '900', 
+              fontSize: '16px', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.5px',
+              cursor: (isLoading || ingredients.length === 0) 
+                ? 'not-allowed' : 'pointer',
+              opacity: (isLoading || ingredients.length === 0) 
+                ? 0.6 : 1,
+              boxShadow: (isLoading || ingredients.length === 0)
+                ? 'none'
+                : '0 8px 24px rgba(117,7,12,0.3)',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px',
             }}
           >
-            {isLoading ? <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /> : '🍽️ Get Recipes'}
-          </button>
+            {isLoading 
+              ? <Loader2 size={24} style={{ 
+                  animation: 'spin 1s linear infinite' 
+                }} /> 
+              : <><ChefHat size={20} /> Get Recipes</>
+            }
+          </motion.button>
+
         </aside>
 
         {/* Right Section: Main Recipe Display Card */}
-        <section style={{
+        <section ref={recipeRef} style={{
           backgroundColor: 'white',
           borderRadius: '40px',
           border: `1px solid rgba(37, 24, 20, 0.08)`,
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.04)',
-          height: '80vh',
-          maxHeight: '900px',
           minHeight: '600px',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
           position: 'relative'
         }}>
 
           {/* Header */}
-          <div style={{ padding: '24px 32px', backgroundColor: colors.surfaceContainer, borderBottom: `1px solid rgba(171, 53, 0, 0.1)`, display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ width: '48px', height: '48px', backgroundColor: colors.primary, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 8px 16px rgba(171, 53, 0, 0.2)' }}>
-              <ChefHat size={28} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', color: colors.primary, margin: 0 }}>Chef AI Assistant</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                <div style={{ width: '8px', height: '8px', backgroundColor: '#006e1c', borderRadius: '50%' }}></div>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#006e1c' }}>Ready to cook</span>
+          <div style={{ 
+            padding: '16px 32px', 
+            backgroundColor: colors.surfaceContainer, 
+            borderBottom: `1px solid rgba(171, 53, 0, 0.1)`, 
+            borderTopLeftRadius: '40px',
+            borderTopRightRadius: '40px',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            minHeight: '80px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ width: '48px', height: '48px', backgroundColor: colors.primary, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 8px 16px rgba(117, 7, 12, 0.2)' }}>
+                <ChefHat size={28} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: colors.primary, margin: 0 }}>AI Recipe Generator</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                  <div style={{ width: '8px', height: '8px', backgroundColor: '#4F6815', borderRadius: '50%' }}></div>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#4F6815' }}>Powered by Gemini AI</span>
+                </div>
               </div>
             </div>
+
+            {/* Top Right Actions */}
+            {recipe && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
+              >
+                {!isSaved ? (
+                  <motion.button
+                    onClick={saveRecipe}
+                    disabled={saveLoading}
+                    whileTap={{ scale: 0.97 }}
+                    className="btn-fluid-fill"
+                    style={{
+                      padding: '10px 24px', borderRadius: '12px', backgroundColor: '#75070C', color: 'white', border: 'none',
+                      fontWeight: '800', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px',
+                      cursor: saveLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                      boxShadow: '0 4px 12px rgba(117,7,12,0.15)'
+                    }}
+                  >
+                    {saveLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <><Bookmark size={16} /> Save Recipe</>}
+                  </motion.button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ padding: '10px 20px', borderRadius: '12px', backgroundColor: '#F0FFF4', border: '1px solid #4F6815', color: '#4F6815', fontWeight: '800', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle2 size={16} /> Saved
+                    </div>
+                    <motion.button
+                      onClick={() => navigate('/library')}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="btn-fluid-fill"
+                      style={{ 
+                        padding: '10px 20px', borderRadius: '12px', backgroundColor: 'white', color: '#75070C', border: '1px solid #75070C', 
+                        fontWeight: '800', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', 
+                        display: 'flex', alignItems: 'center', gap: '6px' 
+                      }}
+                    >
+                      Library <ChevronRight size={16} />
+                    </motion.button>
+                  </div>
+                )}
+              </motion.div>
+            )}
           </div>
 
           {/* Messages Canvas */}
-          <div ref={scrollRef} className="chat-scrollbar" style={{
+          <div ref={scrollRef} style={{
             flex: 1,
-            overflowY: 'auto',
             padding: '32px',
             paddingBottom: '40px',
             display: 'flex',
             flexDirection: 'column',
             gap: '24px',
             backgroundColor: colors.background,
-            borderBottom: `1px solid ${colors.outline}`
+            borderBottom: `1px solid ${colors.outline}`,
+            borderBottomLeftRadius: recipe ? 0 : '40px',
+            borderBottomRightRadius: recipe ? 0 : '40px'
           }}>
 
             {/* Initial Bot Welcome */}
             {!isLoading && !recipe && (
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFDBD0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🤖</div>
-                <div style={{ maxWidth: '80%', padding: '16px 20px', backgroundColor: colors.surfaceContainer, borderRadius: '20px', borderTopLeftRadius: '4px', fontSize: '14px', fontWeight: '600' }}>
-                  Hello! I'm your AI Sous-Chef. Ready to turn those ingredients into something delicious. What's on your mind today?
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: '16px',
+                  padding: '40px',
+                  textAlign: 'center'
+                }}
+              >
+                <motion.div
+                  animate={{ 
+                    y: [0, -12, 0],
+                    rotate: [0, 5, -5, 0]
+                  }}
+                  transition={{ 
+                    duration: 4, 
+                    repeat: Infinity, 
+                    ease: "easeInOut" 
+                  }}
+                  style={{
+                    width: '80px',
+                    height: '80px',
+                    backgroundColor: '#FFF1ED',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 8px 24px rgba(117,7,12,0.12)'
+                  }}
+                >
+                  <ChefHat size={40} color="#75070C" />
+                </motion.div>
+                <div>
+                  <h3 style={{ 
+                    fontSize: '22px', 
+                    fontWeight: '900', 
+                    color: '#2A241E',
+                    margin: '0 0 8px 0'
+                  }}>
+                    Ready to Cook Something Amazing?
+                  </h3>
+                  <p style={{ 
+                    fontSize: '14px', 
+                    color: '#594139', 
+                    opacity: 0.7,
+                    margin: 0,
+                    maxWidth: '300px'
+                  }}>
+                    Add your ingredients on the left and I'll craft the perfect recipe for you.
+                  </p>
                 </div>
-              </div>
+              </motion.div>
             )}
 
             {/* Chat Messages - Initial Announcement */}
             {messages.length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFDBD0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🤖</div>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFE9E3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ChefHat size={16} color="#75070C" />
+                    </div>
                 <div style={{
                   maxWidth: '80%',
                   padding: '16px 20px',
@@ -442,7 +709,9 @@ const AIRecipeGenerator = () => {
             {/* Loading Indicator */}
             {(isLoading || followUpLoading) && (
               <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFDBD0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🤖</div>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFE9E3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ChefHat size={16} color="#75070C" />
+                    </div>
                 <div style={{ display: 'flex', gap: '6px', padding: '16px 20px', backgroundColor: colors.surfaceContainer, borderRadius: '20px', borderTopLeftRadius: '4px' }}>
                   {[0, 0.2, 0.4].map((delay, i) => (
                     <div key={i} style={{ width: '8px', height: '8px', backgroundColor: colors.primary, borderRadius: '50%', animation: `bounce 1.4s infinite ease-in-out both`, animationDelay: `${delay}s` }}></div>
@@ -453,7 +722,13 @@ const AIRecipeGenerator = () => {
 
             {/* Recipe Card */}
             {recipe && (
-              <div style={{ backgroundColor: 'white', borderRadius: '32px', border: `1px solid ${colors.outline}`, boxShadow: '0 12px 24px rgba(171, 53, 0, 0.08)', maxWidth: '700px' }}>
+              <motion.div
+                ref={recipeRef}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                style={{ backgroundColor: 'white', borderRadius: '32px', border: `1px solid ${colors.outline}`, boxShadow: '0 12px 24px rgba(171, 53, 0, 0.08)', maxWidth: '700px' }}
+              >
                 {recipe.image && (
                   <div style={{ height: '280px', position: 'relative', borderTopLeftRadius: '32px', borderTopRightRadius: '32px', overflow: 'hidden' }}>
                     <img src={recipe.image} alt={recipe.recipeName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -511,85 +786,78 @@ const AIRecipeGenerator = () => {
                       ))}
                     </div>
                   </div>
-
-                  <button
-                    onClick={saveRecipe}
-                    disabled={isSaved || saveLoading}
-                    style={{
-                      width: '100%', marginTop: '32px', padding: '16px', borderRadius: '20px',
-                      backgroundColor: isSaved ? colors.accentRed : colors.primary,
-                      color: 'white', border: 'none', fontWeight: '800', fontSize: '14px',
-                      textTransform: 'uppercase', letterSpacing: '1px', cursor: (isSaved || saveLoading) ? 'not-allowed' : 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                      boxShadow: '0 8px 16px rgba(171, 53, 0, 0.2)', transition: 'all 0.3s ease'
-                    }}
-                  >
-                    {saveLoading ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> : (isSaved ? <><CheckCircle2 size={20} /> Saved</> : <><Bookmark size={20} /> Save Recipe</>)}
-                  </button>
-
-                  {isSaved && (
-                    <button
-                      onClick={() => navigate('/smart-library')}
-                      style={{
-                        width: '100%', marginTop: '12px', padding: '16px', borderRadius: '20px',
-                        backgroundColor: 'white', color: colors.primary,
-                        border: `2px solid ${colors.primary}`, fontWeight: '800', fontSize: '14px',
-                        textTransform: 'uppercase', letterSpacing: '1px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <ChevronRight size={20} /> Go to Library
-                    </button>
-                  )}
                 </div>
 
                 {/* Follow-up Conversation */}
                 {messages.slice(1).map((msg, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: '12px', marginBottom: '8px' }}>
-                    {msg.role === 'bot' && <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFDBD0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👨‍🍳</div>}
+                    {msg.role === 'bot' && (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFE9E3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ChefHat size={16} color="#75070C" />
+                      </div>
+                    )}
                     <div style={{
                       maxWidth: msg.role === 'user' ? '70%' : '85%',
-                      padding: msg.role === 'user' ? '12px 16px' : '16px 24px',
-                      backgroundColor: msg.role === 'user' ? colors.primary : '#FFF',
+                      padding: '14px 18px',
+                      backgroundColor: msg.role === 'user' ? colors.primary : '#FFF8F6',
                       color: msg.role === 'user' ? 'white' : colors.text,
-                      borderRadius: '20px',
-                      borderTopLeftRadius: msg.role === 'bot' ? '4px' : '20px',
-                      borderTopRightRadius: msg.role === 'user' ? '4px' : '20px',
+                      borderRadius: '16px',
+                      borderTopLeftRadius: msg.role === 'bot' ? '4px' : '16px',
+                      borderTopRightRadius: msg.role === 'user' ? '4px' : '16px',
                       fontSize: msg.role === 'user' ? '13px' : '14px',
-                      fontWeight: '600',
-                      boxShadow: msg.role === 'bot' ? '0 4px 12px rgba(171, 53, 0, 0.05)' : 'none',
-                      borderLeft: msg.role === 'bot' ? `4px solid ${colors.primary}` : 'none',
+                      fontWeight: '500',
+                      boxShadow: msg.role === 'bot' ? '0 2px 8px rgba(117,7,12,0.06)' : 'none',
+                      border: msg.role === 'bot' ? `1px solid ${colors.outline}` : 'none',
                       lineHeight: '1.6'
                     }}>
-                      {msg.role === 'bot' && <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: colors.primary, marginBottom: '4px', fontWeight: '800' }}>Chef's Tip</div>}
-                      {msg.text}
+                      {msg.role === 'bot' ? cleanFollowUpText(msg.text) : msg.text}
                     </div>
                   </div>
                 ))}
-              </div>
+              </motion.div>
             )}
           </div>
 
-          {/* Chat Input Area */}
+          {/* Fixed Bottom Chat Bar */}
           {recipe && (
-            <div style={{ padding: '20px 32px', backgroundColor: 'white', borderTop: `1px solid ${colors.outline}`, display: 'flex', gap: '12px' }}>
-              <input
-                type="text"
-                placeholder="Ask follow-up questions... (e.g. 'Can I use kale instead?')"
-                value={followUpInput}
-                onChange={(e) => setFollowUpInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendFollowUpQuestion()}
-                disabled={followUpLoading}
-                style={{ flex: 1, padding: '14px 24px', borderRadius: '100px', border: `1px solid ${colors.outline}`, backgroundColor: colors.background, fontSize: '14px', fontWeight: '500', outline: 'none' }}
-              />
-              <button
-                onClick={sendFollowUpQuestion}
-                disabled={!followUpInput.trim() || followUpLoading}
-                style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: colors.primary, border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (followUpLoading || !followUpInput.trim()) ? 'not-allowed' : 'pointer', opacity: (followUpLoading || !followUpInput.trim()) ? 0.6 : 1, transition: 'all 0.2s ease' }}
-              >
-                <Send size={20} />
-              </button>
+            <div style={{ 
+              position: 'sticky',
+              bottom: 0,
+              padding: '16px 24px', 
+              backgroundColor: 'white', 
+              borderTop: `1px solid ${colors.outline}`,
+              borderBottomLeftRadius: '40px',
+              borderBottomRightRadius: '40px',
+              zIndex: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              boxShadow: '0 -10px 20px rgba(0,0,0,0.02)'
+            }}>
+              {/* Follow-up Chat Input */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  placeholder="Ask anything about this recipe..."
+                  value={followUpInput}
+                  onChange={(e) => setFollowUpInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendFollowUpQuestion()}
+                  disabled={followUpLoading}
+                  style={{ flex: 1, padding: '12px 20px', borderRadius: '100px', border: `1px solid ${colors.outline}`, backgroundColor: colors.background, fontSize: '13px', fontWeight: '500', outline: 'none', transition: 'all 0.3s ease' }}
+                  onFocus={(e) => { e.target.style.borderColor = '#75070C'; e.target.style.boxShadow = '0 0 0 3px rgba(117,7,12,0.08)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = colors.outline; e.target.style.boxShadow = 'none'; }}
+                />
+                <motion.button
+                  onClick={sendFollowUpQuestion}
+                  disabled={!followUpInput.trim() || followUpLoading}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  className="btn-fluid-fill"
+                  style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: followUpInput.trim() ? '#75070C' : colors.outline, border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (!followUpInput.trim() || followUpLoading) ? 'not-allowed' : 'pointer', transition: 'background-color 0.3s ease', flexShrink: 0 }}
+                >
+                  {followUpLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
+                </motion.button>
+              </div>
             </div>
           )}
         </section>
@@ -612,7 +880,7 @@ const AIRecipeGenerator = () => {
             <div style={{ width: '28px', height: '28px', backgroundColor: colors.secondaryGreen, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
               <CheckCircle2 size={18} />
             </div>
-            Recipe saved to Smart Library!
+            Recipe saved to My CookBook!
           </motion.div>
         )}
       </AnimatePresence>

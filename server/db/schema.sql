@@ -15,6 +15,8 @@ CREATE TABLE saved_recipes (
     instructions TEXT NOT NULL,
     calories INTEGER,
     servings INTEGER,
+    category VARCHAR(50) DEFAULT 'Other',
+    image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 -- CREATE TABLE reviews (

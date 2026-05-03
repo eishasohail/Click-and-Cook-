@@ -59,15 +59,22 @@ export const recipeService = {
     return data;
   },
 
-  async getSavedRecipes(token) {
-    const response = await fetch(`${API_BASE_URL}/api/recipes/saved`, {
-      method: 'GET',
-      headers: { 
-        'Authorization': `Bearer ${token}`
-      }
+  getSavedRecipes: async (token) => {
+    const res = await fetch(`${API_BASE_URL}/api/recipes/saved`, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to fetch recipes');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch recipes');
+    return data;
+  },
+
+  deleteRecipe: async (id, token) => {
+    const res = await fetch(`${API_BASE_URL}/api/recipes/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete recipe');
     return data;
   }
 };

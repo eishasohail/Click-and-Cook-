@@ -8,6 +8,7 @@ import './SignIn_SignUp.css';
 
 import { useDispatch } from 'react-redux';
 import { setCredentials } from '../../redux/slices/authSlice';
+import PageLoader from '../shared/PageLoader';
 
 const images = ['/bg1.png', '/bg2.jpg', '/bg3.jpg'];
 
@@ -128,21 +129,7 @@ export default function SignUp() {
   };
 
   if (showSuccess) {
-    return (
-      <div className="min-h-screen mesh-gradient flex items-center justify-center p-6">
-        <div className="animate-fade-in-up flex flex-col items-center justify-center text-center p-12 glass-panel rounded-[2.5rem] shadow-2xl max-w-md w-full">
-          <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-6 animate-pulse-slow ring-4 ring-white/30">
-            <ChefHat size={40} className="text-brand-orange" />
-          </div>
-          <h2 className="text-2xl font-black text-stone-900 mb-2">
-            Welcome to the Kitchen!
-          </h2>
-          <p className="text-stone-500 font-medium">
-            Preparing your recipes...
-          </p>
-        </div>
-      </div>
-    );
+    return <PageLoader isVisible={true} />;
   }
 
   return (

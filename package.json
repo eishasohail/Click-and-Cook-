@@ -1,20 +1,12 @@
 {
-  "name": "personalized-recipe-recommender",
+  "name": "click-and-cook",
   "version": "1.0.0",
-  "description": "",
   "scripts": {
-    "start": "func start",
-    "test": "echo \"No tests yet...\""
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start"
   },
   "dependencies": {
-    "@azure/cosmos": "^4.2.0",
-    "@azure/functions": "^4.0.0",
-    "@google/generative-ai": "^0.24.1",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "mssql": "^11.0.1"
-  },
-  "main": "src/{index.js,functions/*.js}"
+    "concurrently": "^9.1.0"
+  }
 }

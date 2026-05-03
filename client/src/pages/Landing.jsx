@@ -25,45 +25,44 @@ const SafeAurora = (props) => {
 const FAQItem = ({ item }) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
-    <motion.div
-      onClick={() => setIsOpen(!isOpen)}
-      whileHover={{ y: -8, scale: 1.01 }}
-      style={{
-        backgroundColor: 'white', borderRadius: '35px', padding: '35px 50px',
-        cursor: 'pointer', boxShadow: isOpen ? '0 30px 60px rgba(117,7,12,0.08)' : '0 10px 30px rgba(0,0,0,0.02)',
-        marginBottom: '25px',
-        border: isOpen ? '2px solid #75070C' : '2px solid transparent',
-        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 0.03 }}
-          style={{ position: 'absolute', inset: 0, backgroundColor: '#75070C' }}
-        />
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-        <h4 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: isOpen ? '#75070C' : '#2A241E', transition: 'color 0.3s ease' }}>{item.q}</h4>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0, scale: isOpen ? 1.2 : 1 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
-          {isOpen ? <Minus size={26} color="#75070C" /> : <Plus size={26} color="#4F6815" />}
+    <div style={{ borderBottom: '1px solid rgba(42,36,30,0.1)' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '24px 0',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left'
+        }}
+      >
+        <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#2A241E', transition: 'color 0.3s ease' }}>
+          {item.q}
+        </h4>
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
+          {isOpen ? <Minus size={20} color="#2A241E" /> : <Plus size={20} color="#2A241E" />}
         </motion.div>
-      </div>
+      </button>
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1, marginTop: 25 }}
+            animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            style={{ overflow: 'hidden', fontSize: '18px', color: '#4A3F35', lineHeight: '1.8', opacity: 0.8, position: 'relative', zIndex: 1 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            style={{ overflow: 'hidden' }}
           >
-            {item.a}
+            <div style={{ paddingBottom: '24px', fontSize: '15px', color: '#4A3F35', lineHeight: '1.6', opacity: 0.7 }}>
+              {item.a}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
 
@@ -96,7 +95,8 @@ export default function Landing() {
     // Fetch Reviews from backend
     const fetchReviews = async () => {
       try {
-        const response = await axios.get('/api/reviews');
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+        const response = await axios.get(`${API_BASE_URL}/api/reviews`);
         if (response.data && response.data.length > 0) {
           setReviews(response.data);
         }
@@ -130,9 +130,9 @@ export default function Landing() {
 
   const faqs = [
     { q: "Is it free to use the AI generator?", a: "We offer a generous free tier that lets you generate up to 10 gourmet recipes per month. For unlimited access and advanced features, you can upgrade to Pro." },
-    { q: "Can I save my own secret recipes?", a: "Absolutely! You can manually add your family secrets to your digital cookbook, organize them with tags, and even share them with selected friends." },
-    { q: "Do the recipes cater to allergies?", a: "Absolutely! You can set persistent dietary restrictions and allergies in your profile. Our AI filters all ingredients and cross-references them against your safety settings before suggesting any meal." },
-    { q: "Can I share recipes with friends?", a: "Yes, Click and Cook is social! You can share recipes directly via links, or invite friends to collaborate on shared meal plans." }
+    { q: "Can I save my own secret recipes?", a: "Absolutely! You can manually add your favorite recipes to your digital cookbook and organize them perfectly within My CookBook." },
+    { q: "Do the recipes cater to allergies?", a: "Yes! You can specify any dietary restrictions or allergies before generating. Our AI carefully filters all ingredients to ensure the suggested meal is safe for you." },
+    { q: "Can I tweak a recipe after it's generated?", a: "Definitely! Every generated recipe comes with an AI follow-up chat. You can ask for ingredient substitutions, request a spicier version, or ask any cooking questions right there." }
   ];
 
   const sectionDividerStyle = { maxWidth: '1440px', margin: '0 auto', borderBottom: '1px solid rgba(42,36,30,0.06)' };
@@ -177,7 +177,6 @@ export default function Landing() {
                   </span>
                 </div>
                 <button onClick={() => navigate('/dashboard')} className="shimmer-btn" style={{ padding: '16px 36px', borderRadius: '14px', border: 'none', color: 'white', fontWeight: '900', cursor: 'pointer', fontSize: '14px' }}>Dashboard</button>
-                <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#75070C', fontWeight: '900', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}>Logout</button>
               </div>
             ) : (
               <>
@@ -225,7 +224,7 @@ export default function Landing() {
               <div><Bookmark size={36} /><h3 style={{ fontSize: '28px', fontWeight: '900', marginTop: '30px' }}>Save Your Favorites</h3><p style={{ fontSize: '17px', opacity: 0.7, marginTop: '15px' }}>Build your personal digital cookbook and access your recipes from any device, anywhere.</p></div>
               <div style={{ display: 'flex', marginLeft: '10px' }}>{[1, 2, 3].map(i => (<div key={i} style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #4F6815', marginLeft: '-12px', overflow: 'hidden' }}><img src={`https://i.pravatar.cc/100?img=${i + 30}`} alt="u" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>))}<div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid #4F6815', marginLeft: '-12px', backgroundColor: 'white', color: '#4F6815', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '900' }}>+2k</div></div>
             </motion.div>
-            <motion.div variants={cardVariants} whileHover={{ y: -15 }} style={{ gridColumn: 'span 4', backgroundColor: '#E8A88E', borderRadius: '45px', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}><BookOpen size={36} color="#75070C" /><h3 style={{ fontSize: '28px', fontWeight: '900', margin: '30px 0 15px 0' }}>Smart Library</h3><p style={{ fontSize: '17px', opacity: 0.7 }}>Organized by cuisine, difficulty, and prep time for your convenience.</p></motion.div>
+            <motion.div variants={cardVariants} whileHover={{ y: -15 }} style={{ gridColumn: 'span 4', backgroundColor: '#E8A88E', borderRadius: '45px', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}><BookOpen size={36} color="#75070C" /><h3 style={{ fontSize: '28px', fontWeight: '900', margin: '30px 0 15px 0' }}>My CookBook</h3><p style={{ fontSize: '17px', opacity: 0.7 }}>Organized by category, difficulty, and prep time for your convenience.</p></motion.div>
             <motion.div variants={cardVariants} whileHover={{ y: -15 }} style={{ gridColumn: 'span 8', backgroundColor: '#2A241E', borderRadius: '45px', padding: '70px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ maxWidth: '60%' }}><h3 style={{ fontSize: '32px', fontWeight: '900' }}>Personalized Recommendations</h3><p style={{ fontSize: '17px', opacity: 0.7, marginTop: '15px' }}>We learn your taste buds and suggest dishes you'll actually love based on your history.</p></div><div style={{ display: 'flex', gap: '12px' }}>{['Vegan', 'Low Carb', 'Spicy'].map(tag => (<div key={tag} style={{ padding: '12px 24px', borderRadius: '100px', border: '1px solid rgba(255,255,255,0.15)', fontSize: '13px', backgroundColor: 'rgba(255,255,255,0.05)', fontWeight: '700' }}>{tag}</div>))}</div></motion.div>
           </motion.div>
         </section>
@@ -261,21 +260,33 @@ export default function Landing() {
         <section id="reviews" style={{ padding: '180px 0', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}><SafeAurora colorStops={["#FFE899", "#E8A88E", "#F0E6DA"]} blend={0.8} amplitude={1.2} speed={0.4} /></div>
           <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '0 60px', position: 'relative', zIndex: 1 }}>
-            <div style={{ textAlign: 'center', marginBottom: '120px' }}><h2 style={{ fontSize: '56px', fontWeight: '900' }}>Voices of the <span style={{ color: '#75070C' }}>Kitchen</span></h2></div>
-            <motion.div variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: false, amount: 0.1 }} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '40px' }}>
-              {reviews.map((rev, i) => {
-                const colors = ['#75070C', '#4F6815'];
-                const cardColor = colors[i % colors.length];
-                return (
-                  <motion.div key={i} variants={cardVariants} whileHover={{ y: -15 }} style={{ backgroundColor: 'white', padding: '60px', borderRadius: '45px', borderLeft: `8px solid ${cardColor}`, boxShadow: '0 20px 50px rgba(0,0,0,0.03)', position: 'relative' }}>
-                    <AnimatedStars count={rev.rating || 5} />
-                    <p style={{ fontSize: '19px', fontWeight: '500', color: '#4A3F35', lineHeight: '1.7', marginBottom: '50px', opacity: 0.8 }}>"{rev.text}"</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><div style={{ width: '50px', height: '50px', borderRadius: '15px', backgroundColor: cardColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '20px' }}>{(rev.name && rev.name[0]) || 'U'}</div><h4 style={{ fontWeight: '900', fontSize: '20px', margin: 0 }}>{rev.name}</h4></div>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
+            <div style={{ textAlign: 'center', marginBottom: '100px' }}><h2 style={{ fontSize: '56px', fontWeight: '900' }}>Voices of the <span style={{ color: '#75070C' }}>Kitchen</span></h2></div>
           </div>
+          
+          {reviews && reviews.length > 0 && (
+            <div style={{ display: 'flex', overflow: 'hidden', position: 'relative', zIndex: 1, padding: '20px 0' }}>
+              <motion.div 
+                animate={{ x: [0, "-50%"] }} 
+                transition={{ ease: "linear", duration: Math.max(reviews.length * 10, 30), repeat: Infinity }}
+                style={{ display: 'flex', gap: '40px', paddingLeft: '40px', minWidth: 'max-content' }}
+              >
+                {[...reviews, ...reviews, ...reviews, ...reviews].map((rev, i) => {
+                  const colors = ['#75070C', '#4F6815'];
+                  const cardColor = colors[i % colors.length];
+                  return (
+                    <motion.div key={i} whileHover={{ y: -10 }} style={{ width: '450px', backgroundColor: 'white', padding: '50px', borderRadius: '45px', borderLeft: `8px solid ${cardColor}`, boxShadow: '0 20px 50px rgba(0,0,0,0.03)', position: 'relative', flexShrink: 0, whiteSpace: 'normal', display: 'flex', flexDirection: 'column' }}>
+                      <AnimatedStars count={rev.rating || 5} />
+                      <p style={{ fontSize: '18px', fontWeight: '500', color: '#4A3F35', lineHeight: '1.7', marginBottom: 'auto', opacity: 0.8, paddingBottom: '30px' }}>"{rev.text}"</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '45px', height: '45px', borderRadius: '15px', backgroundColor: cardColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '18px' }}>{(rev.name && rev.name[0]) || 'U'}</div>
+                        <h4 style={{ fontWeight: '900', fontSize: '18px', margin: 0, color: '#2A241E' }}>{rev.name}</h4>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            </div>
+          )}
         </section>
 
         <div style={sectionDividerStyle} />
